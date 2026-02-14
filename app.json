@@ -27,7 +27,13 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MyPlants needs access to your photos to add plant images."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
