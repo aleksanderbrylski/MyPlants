@@ -12,7 +12,7 @@ import {
   Unsubscribe,
   Timestamp,
 } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 
 /** Firestore collection: users/{uid}/plants */
@@ -23,32 +23,74 @@ export function plantsCollection(uid: string) {
 export type Plant = {
   id: string;
   name: string;
-  watering: string;
+  watering?: string;
   sunlight?: string;
   fertilization?: string;
+  sprinkling?: string;
+  fertilizationMode?: 'disabled' | 'interval' | 'with_watering';
+  wateringMode?: 'disabled' | 'interval';
+  sprinklingMode?: 'disabled' | 'interval';
   imageUrl?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  wateringIntervalDays?: number | '';
+  fertilizationIntervalDays?: number | '';
+  fertilizationEveryWaterings?: number | '';
+  sprinklingIntervalDays?: number | '';
+  notes?: string;
+  lastWateredAt?: Date;
+  lastFertilizedAt?: Date;
+  lastSprinkledAt?: Date;
 };
 
-export type PlantInput = Omit<Plant, 'id' | 'createdAt' | 'updatedAt'> & {
-  sunlight?: string;
-  fertilization?: string;
-  imageUrl?: string;
-};
+export type PlantInput = Omit<Plant, 'id' | 'createdAt' | 'updatedAt'>;
 
 function mapDocToPlant(id: string, data: Record<string, unknown>): Plant {
   const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : undefined;
   const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : undefined;
+  const lastWateredAt =
+    data.lastWateredAt instanceof Timestamp ? data.lastWateredAt.toDate() : undefined;
+  const lastFertilizedAt =
+    data.lastFertilizedAt instanceof Timestamp ? data.lastFertilizedAt.toDate() : undefined;
+  const lastSprinkledAt =
+    data.lastSprinkledAt instanceof Timestamp ? data.lastSprinkledAt.toDate() : undefined;
   return {
     id,
     name: (data.name as string) ?? '',
-    watering: (data.watering as string) ?? '',
+    watering: data.watering as string | undefined,
     sunlight: data.sunlight as string | undefined,
     fertilization: data.fertilization as string | undefined,
+    sprinkling: data.sprinkling as string | undefined,
+    fertilizationMode: data.fertilizationMode as
+      | 'disabled'
+      | 'interval'
+      | 'with_watering'
+      | undefined,
+    wateringMode: data.wateringMode as ('disabled' | 'interval' | undefined),
+    sprinklingMode: data.sprinklingMode as ('disabled' | 'interval' | undefined),
     imageUrl: data.imageUrl as string | undefined,
     createdAt,
     updatedAt,
+    wateringIntervalDays:
+      typeof data.wateringIntervalDays === 'number'
+        ? (data.wateringIntervalDays as number)
+        : undefined,
+    fertilizationIntervalDays:
+      typeof data.fertilizationIntervalDays === 'number'
+        ? (data.fertilizationIntervalDays as number)
+        : undefined,
+    fertilizationEveryWaterings:
+      typeof data.fertilizationEveryWaterings === 'number'
+        ? (data.fertilizationEveryWaterings as number)
+        : undefined,
+    sprinklingIntervalDays:
+      typeof data.sprinklingIntervalDays === 'number'
+        ? (data.sprinklingIntervalDays as number)
+        : undefined,
+    notes: data.notes as string | undefined,
+    lastWateredAt,
+    lastFertilizedAt,
+    lastSprinkledAt,
   };
 }
 
@@ -78,11 +120,17 @@ export async function getPlant(uid: string, plantId: string): Promise<Plant | nu
   return mapDocToPlant(snap.id, snap.data());
 }
 
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined)
+  ) as Partial<T>;
+}
+
 export async function addPlant(uid: string, input: PlantInput): Promise<string> {
   const col = plantsCollection(uid);
   const now = Timestamp.now();
   const docRef = await addDoc(col, {
-    ...input,
+    ...stripUndefined(input),
     createdAt: now,
     updatedAt: now,
   });
@@ -96,13 +144,34 @@ export async function updatePlant(
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'plants', plantId);
   await updateDoc(docRef, {
-    ...updates,
+    ...stripUndefined(updates as Record<string, unknown>),
     updatedAt: Timestamp.now(),
   });
 }
 
 export async function deletePlant(uid: string, plantId: string): Promise<void> {
   const docRef = doc(db, 'users', uid, 'plants', plantId);
+  const snap = await getDoc(docRef);
+
+  if (!snap.exists()) {
+    return;
+  }
+
+  const data = snap.data() as { imageUrl?: unknown };
+  const hasImage =
+    typeof data.imageUrl === 'string' && (data.imageUrl as string).trim().length > 0;
+
+  if (hasImage) {
+    const imageRef = ref(storage, `users/${uid}/plants/${plantId}/image`);
+    try {
+      await deleteObject(imageRef);
+    } catch (error) {
+      // Ignore errors when deleting the image so plant removal still succeeds
+      // (e.g. if the image was never uploaded or already removed).
+      console.log('Failed to delete plant image from storage', error);
+    }
+  }
+
   await deleteDoc(docRef);
 }
 
