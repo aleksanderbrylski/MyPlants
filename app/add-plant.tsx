@@ -457,6 +457,14 @@ export default function AddPlantScreen() {
     ]);
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/garden');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -464,8 +472,8 @@ export default function AddPlantScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="close" size={24} color="#1b3b2f" />
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#1b3b2f" />
           </TouchableOpacity>
           <Text style={styles.title}>{isEditing ? 'Edit Plant' : 'New Plant'}</Text>
           <View style={styles.headerRightPlaceholder} />
@@ -800,7 +808,7 @@ export default function AddPlantScreen() {
                 <View style={styles.footerContainer}>
                   <TouchableOpacity
                     style={styles.secondaryButton}
-                    onPress={() => router.back()}
+                    onPress={handleBack}
                     disabled={saving || deleting}
                   >
                     <Text style={styles.secondaryButtonText}>Cancel</Text>

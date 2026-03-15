@@ -1,176 +1,191 @@
-import React from 'react';
-import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { subscribePlants, type Plant } from '@/lib/firestore';
+import {
+  buildUpcomingTasks,
+  getRelativeLabelStyle,
+  type UpcomingTask,
+} from '@/lib/upcomingTasks';
 
-type Task = {
-  id: string;
-  plant: string;
-  watering: string;
-  sunlight: string;
-  fertilization: string;
+const TASK_TYPE_LABEL: Record<UpcomingTask['taskType'], string> = {
+  watering: 'Watering',
+  fertilization: 'Fertilization',
+  sprinkling: 'Sprinkling',
 };
 
-type PlantCard = {
-  id: string;
-  name: string;
-  watering: string;
-};
+function TaskRow({ task }: { task: UpcomingTask }) {
+  const pillStyle = getRelativeLabelStyle(task.relativeLabel);
+  const isWatering = task.taskType === 'watering';
+  const isSprinkling = task.taskType === 'sprinkling';
+  const isFertilization = task.taskType === 'fertilization';
+  return (
+    <View style={styles.taskRow}>
+      <View style={styles.taskIconWrapper}>
+        {isWatering && <Ionicons name="water" size={20} color="#0ea5e9" />}
+        {isSprinkling && <Ionicons name="water-outline" size={20} color="#eab308" />}
+        {isFertilization && <Ionicons name="leaf" size={20} color="#22c55e" />}
+      </View>
+      <View style={styles.taskTextWrap}>
+        <Text style={styles.taskPlantName}>{task.plantName}</Text>
+        <Text style={styles.taskTypeSubtitle}>{TASK_TYPE_LABEL[task.taskType]}</Text>
+      </View>
+      <View style={[styles.taskPill, { backgroundColor: pillStyle.backgroundColor }]}>
+        <Text style={[styles.taskPillText, { color: pillStyle.color }]}>
+          {task.relativeLabel}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
-const UPCOMING_TASKS: Task[] = [
-  {
-    id: '1',
-    plant: 'Fiddle Leaf Fig',
-    watering: 'In 2 days',
-    sunlight: 'Bright, indirect',
-    fertilization: 'In 3 weeks',
-  },
-  {
-    id: '2',
-    plant: 'Snake Plant',
-    watering: 'In 5 days',
-    sunlight: 'Low to bright, indirect',
-    fertilization: 'In 6 weeks',
-  },
-  {
-    id: '3',
-    plant: 'Monstera',
-    watering: 'In 3 days',
-    sunlight: 'Bright, indirect',
-    fertilization: 'In 4 weeks',
-  },
-];
-
-const PLANTS: PlantCard[] = [
-  {
-    id: '1',
-    name: 'Fiddle Leaf Fig',
-    watering: 'Water in 2 days',
-  },
-  {
-    id: '2',
-    name: 'Snake Plant',
-    watering: 'Water in 5 days',
-  },
-  {
-    id: '3',
-    name: 'Monstera',
-    watering: 'Water in 3 days',
-  },
-  {
-    id: '4',
-    name: 'Pothos',
-    watering: 'Water in 4 days',
-  },
-];
+const UPCOMING_PREVIEW_COUNT = 5;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const [plants, setPlants] = useState<Plant[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsubscribe = subscribePlants(user.uid, (fetched) => {
+      setPlants(fetched);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const tasks = useMemo(() => buildUpcomingTasks(plants), [plants]);
+  const tasksPreview = tasks.slice(0, UPCOMING_PREVIEW_COUNT);
 
   const handleSignOut = async () => {
     await signOut();
     router.replace('/');
   };
 
+  const plantRows = useMemo(() => {
+    const rows: Plant[][] = [];
+    for (let i = 0; i < plants.length; i += 2) {
+      rows.push(plants.slice(i, i + 2));
+    }
+    return rows;
+  }, [plants]);
+
+  const renderPlantCard = (plant: Plant) => (
+    <TouchableOpacity
+      key={plant.id}
+      style={styles.plantCard}
+      activeOpacity={0.9}
+      onPress={() => router.push({ pathname: '/add-plant', params: { plantId: plant.id } })}
+    >
+      <View style={styles.plantImageWrapper}>
+        {plant.imageUrl ? (
+          <Image
+            source={{ uri: plant.imageUrl }}
+            style={styles.plantImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.placeholderImage}>
+            <Ionicons name="leaf-outline" size={40} color="#9ca3af" />
+          </View>
+        )}
+      </View>
+      <Text style={styles.plantName} numberOfLines={1}>
+        {plant.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#22c55e" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Top header */}
+        {/* Header: MyPlants + Logout */}
         <View style={styles.topBar}>
           <View style={styles.brandContainer}>
             <View style={styles.brandIcon}>
               <Ionicons name="leaf" size={18} color="#22c55e" />
             </View>
-            <Text style={styles.brandText}>Plant Care</Text>
+            <Text style={styles.brandText}>MyPlants</Text>
           </View>
-          <View style={styles.topBarRight}>
-            <TouchableOpacity
-              style={styles.profileBubble}
-              onPress={() => router.push('/garden')}
-            >
-              <Ionicons name="flower-outline" size={20} color="#1b3b2f" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-              <Text style={styles.signOutText}>Sign out</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Page title */}
-        <Text style={styles.pageTitle}>My Plants</Text>
-
-        {/* Upcoming tasks card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <View style={styles.iconBadge}>
-                <Ionicons name="calendar-outline" size={18} color="#22c55e" />
-              </View>
-              <Text style={styles.cardTitle}>Upcoming Tasks</Text>
-            </View>
-          </View>
-
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderText, { flex: 2 }]}>Plant</Text>
-            <Text style={[styles.tableHeaderText, { flex: 1.3 }]}>Watering</Text>
-            <Text style={[styles.tableHeaderText, { flex: 1.6 }]}>Sunlight</Text>
-            <Text style={[styles.tableHeaderText, { flex: 1.2 }]}>Fertilization</Text>
-          </View>
-
-          {UPCOMING_TASKS.map((task, index) => (
-            <View
-              key={task.id}
-              style={[
-                styles.tableRow,
-                index < UPCOMING_TASKS.length - 1 && styles.tableRowBorder,
-              ]}
-            >
-              <Text style={[styles.tableCellText, { flex: 2 }]}>{task.plant}</Text>
-              <Text style={[styles.tableCellText, { flex: 1.3 }]}>{task.watering}</Text>
-              <Text style={[styles.tableCellText, { flex: 1.6 }]} numberOfLines={1}>
-                {task.sunlight}
-              </Text>
-              <Text style={[styles.tableCellText, { flex: 1.2 }]}>{task.fertilization}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* All plants header */}
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleWrapper}>
-            <Ionicons name="leaf-outline" size={18} color="#16a34a" />
-            <Text style={styles.sectionTitle}>All Plants</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.addPlantButton}
-            onPress={() => router.push('/garden')}
-          >
-            <Ionicons name="add" size={16} color="#ffffff" />
-            <Text style={styles.addPlantButtonText}>View garden</Text>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+            <Text style={styles.logoutText}>Logout</Text>
+            <Ionicons name="arrow-forward" size={16} color="#374151" />
           </TouchableOpacity>
         </View>
 
-        {/* Horizontal list of plants */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.plantRow}
-        >
-          {PLANTS.map((plant) => (
-            <View key={plant.id} style={styles.plantCard}>
-              <View style={styles.plantImageWrapper} />
-              <View style={styles.plantInfo}>
-                <Text style={styles.plantName}>{plant.name}</Text>
-                <View style={styles.plantMetaRow}>
-                  <Ionicons name="water-outline" size={14} color="#0ea5e9" />
-                  <Text style={styles.plantMetaText}>{plant.watering}</Text>
-                </View>
-              </View>
+        {/* Upcoming Tasks card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Upcoming Tasks</Text>
+          {tasks.length === 0 ? (
+            <Text style={styles.emptyTasksText}>No upcoming tasks</Text>
+          ) : (
+            <>
+              {tasksPreview.map((task) => (
+                <TaskRow key={`${task.plantId}-${task.taskType}-${task.dueDate}`} task={task} />
+              ))}
+              <TouchableOpacity
+                style={styles.viewAllTasksLink}
+                onPress={() => router.push('/tasks')}
+              >
+                <Text style={styles.viewAllTasksText}>View all tasks</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* All Plants section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>All Plants</Text>
+          {plants.length === 0 ? (
+            <View style={styles.emptyPlantsWrap}>
+              <Text style={styles.emptyPlantsText}>No plants yet</Text>
+              <TouchableOpacity
+                style={styles.viewGardenButton}
+                onPress={() => router.push('/garden')}
+              >
+                <Text style={styles.viewGardenButtonText}>View Garden</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </ScrollView>
+          ) : (
+            <>
+              {plantRows.map((row, rowIndex) => (
+                <View key={`row-${rowIndex}`} style={styles.plantRow}>
+                  {row.map((plant) => renderPlantCard(plant))}
+                  {row.length === 1 && <View style={styles.plantCardSpacer} />}
+                </View>
+              ))}
+              <TouchableOpacity
+                style={styles.viewGardenButton}
+                onPress={() => router.push('/garden')}
+              >
+                <Text style={styles.viewGardenButtonText}>View Garden</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -180,6 +195,11 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#f4f7f4',
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -210,35 +230,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1b3b2f',
   },
-  topBarRight: {
+  logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  signOutButton: {
+    gap: 6,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 8,
   },
-  signOutText: {
+  logoutText: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#374151',
     fontWeight: '500',
-  },
-  profileBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1b3b2f',
-    marginBottom: 16,
   },
   card: {
     backgroundColor: '#ffffff',
@@ -252,92 +256,72 @@ const styles = StyleSheet.create({
     elevation: 5,
     marginBottom: 24,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: '#dcfce7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#e5e7eb',
-    marginTop: 4,
-  },
-  tableHeaderText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-  },
-  tableRowBorder: {
-    borderBottomWidth: 1,
-    borderColor: '#f3f4f6',
-  },
-  tableCellText: {
-    fontSize: 14,
-    color: '#111827',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 12,
   },
-  sectionTitleWrapper: {
+  taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
   },
-  sectionTitle: {
-    fontSize: 16,
+  taskIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#f0fdf4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  taskTextWrap: {
+    flex: 1,
+  },
+  taskPlantName: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1b3b2f',
+    color: '#111827',
   },
-  addPlantButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  taskTypeSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  taskPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 999,
   },
-  addPlantButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
+  taskPillText: {
+    fontSize: 12,
     fontWeight: '600',
   },
+  viewAllTasksLink: {
+    alignSelf: 'center',
+    marginTop: 12,
+  },
+  viewAllTasksText: {
+    fontSize: 14,
+    color: '#22c55e',
+    fontWeight: '600',
+  },
+  emptyTasksText: {
+    fontSize: 14,
+    color: '#6b7280',
+    paddingVertical: 8,
+  },
   plantRow: {
-    paddingVertical: 4,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
   },
   plantCard: {
-    width: 180,
-    marginRight: 14,
+    flex: 1,
+    minWidth: 0,
     borderRadius: 18,
     backgroundColor: '#ffffff',
     shadowColor: '#000',
@@ -348,32 +332,50 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   plantImageWrapper: {
-    height: 130,
+    height: 120,
     backgroundColor: '#e5e7eb',
   },
   plantImage: {
     width: '100%',
     height: '100%',
   },
-  plantInfo: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#ffffff',
+  placeholderImage: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   plantName: {
     fontSize: 15,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  plantMetaRow: {
-    flexDirection: 'row',
+  viewGardenButton: {
+    alignSelf: 'center',
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  viewGardenButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyPlantsWrap: {
     alignItems: 'center',
-    gap: 4,
+    paddingVertical: 16,
   },
-  plantMetaText: {
-    fontSize: 13,
+  emptyPlantsText: {
+    fontSize: 14,
     color: '#6b7280',
+    marginBottom: 12,
+  },
+  plantCardSpacer: {
+    flex: 1,
+    minWidth: 0,
   },
 });
-
