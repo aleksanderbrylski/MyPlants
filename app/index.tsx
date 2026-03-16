@@ -16,7 +16,7 @@ import { makeRedirectUri, ResponseType } from 'expo-auth-session';
 import { useRouter } from 'expo-router';
 import { useAuthRequest, discovery } from 'expo-auth-session/providers/google';
 import { useAuth } from '@/contexts/AuthContext';
-import { firebaseConfig } from '@/lib/firebase.config';
+import { firebaseConfig } from '../lib/firebase.config';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -38,6 +38,7 @@ export default function LoginScreen() {
   const [googleRequest, googleResult, googlePromptAsync] = useAuthRequest(
     {
       webClientId: firebaseConfig.webClientId,
+      androidClientId: firebaseConfig.androidClientId,
       // On web use id_token in redirect hash to avoid COOP popup issues; native uses code flow.
       ...(Platform.OS === 'web' ? { responseType: ResponseType.IdToken } : {}),
     },

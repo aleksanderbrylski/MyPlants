@@ -19,7 +19,11 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.aleksanderbrylski.MyPlants"
     },
     "web": {
       "bundler": "metro",
@@ -33,10 +37,21 @@
         {
           "photosPermission": "MyPlants needs access to your photos to add plant images."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "c448177e-b568-45ec-8def-1a614a32f998"
+      }
     }
   }
 }
