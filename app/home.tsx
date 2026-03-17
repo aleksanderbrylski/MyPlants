@@ -18,6 +18,7 @@ import {
   getRelativeLabelStyle,
   type UpcomingTask,
 } from '@/lib/upcomingTasks';
+import { checkAndNotify, requestNotificationPermission, setupNotificationHandler } from '@/lib/notifications';
 
 const TASK_TYPE_LABEL: Record<UpcomingTask['taskType'], string> = {
   watering: 'Watering',
@@ -25,13 +26,13 @@ const TASK_TYPE_LABEL: Record<UpcomingTask['taskType'], string> = {
   sprinkling: 'Sprinkling',
 };
 
-function TaskRow({ task }: { task: UpcomingTask }) {
+function TaskRow({ task, onPress }: { task: UpcomingTask; onPress?: () => void }) {
   const pillStyle = getRelativeLabelStyle(task.relativeLabel);
   const isWatering = task.taskType === 'watering';
   const isSprinkling = task.taskType === 'sprinkling';
   const isFertilization = task.taskType === 'fertilization';
   return (
-    <View style={styles.taskRow}>
+    <TouchableOpacity style={styles.taskRow} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.taskIconWrapper}>
         {isWatering && <Ionicons name="water" size={20} color="#0ea5e9" />}
         {isSprinkling && <Ionicons name="water-outline" size={20} color="#eab308" />}
@@ -46,7 +47,7 @@ function TaskRow({ task }: { task: UpcomingTask }) {
           {task.relativeLabel}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -75,6 +76,16 @@ export default function HomeScreen() {
     router.replace('/');
   };
 
+  const handleTestNotification = async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      alert('Notifications not available. Use a dev build instead of Expo Go.');
+      return;
+    }
+    await setupNotificationHandler();
+    await checkAndNotify();
+  };
+
   const plantRows = useMemo(() => {
     const rows: Plant[][] = [];
     for (let i = 0; i < plants.length; i += 2) {
@@ -88,7 +99,7 @@ export default function HomeScreen() {
       key={plant.id}
       style={styles.plantCard}
       activeOpacity={0.9}
-      onPress={() => router.push({ pathname: '/add-plant', params: { plantId: plant.id } })}
+      onPress={() => router.push({ pathname: '/plant-details', params: { plantId: plant.id } })}
     >
       <View style={styles.plantImageWrapper}>
         {plant.imageUrl ? (
@@ -144,7 +155,16 @@ export default function HomeScreen() {
           ) : (
             <>
               {tasksPreview.map((task) => (
-                <TaskRow key={`${task.plantId}-${task.taskType}-${task.dueDate}`} task={task} />
+                <TaskRow
+                  key={`${task.plantId}-${task.taskType}-${task.dueDate}`}
+                  task={task}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/task-detail',
+                      params: { plantId: task.plantId, taskType: task.taskType, dueDate: task.dueDate },
+                    })
+                  }
+                />
               ))}
               <TouchableOpacity
                 style={styles.viewAllTasksLink}
@@ -154,6 +174,10 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </>
           )}
+          <TouchableOpacity style={styles.testNotifButton} onPress={handleTestNotification}>
+            <Ionicons name="notifications-outline" size={15} color="#6b7280" />
+            <Text style={styles.testNotifText}>Test notification</Text>
+          </TouchableOpacity>
         </View>
 
         {/* All Plants section */}
@@ -377,5 +401,21 @@ const styles = StyleSheet.create({
   plantCardSpacer: {
     flex: 1,
     minWidth: 0,
+  },
+  testNotifButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  testNotifText: {
+    fontSize: 13,
+    color: '#6b7280',
   },
 });

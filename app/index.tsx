@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri, ResponseType } from 'expo-auth-session';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useAuthRequest, discovery } from 'expo-auth-session/providers/google';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,20 +30,23 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const proxyRedirectUri = 'https://auth.expo.io/@aleksanderbrylski/MyPlants';
 
-  const googleRedirectUri = useMemo(
-    () => makeRedirectUri({ scheme: 'myapp', path: 'redirect' }),
-    []
-  );
+  const googleRedirectUri = isExpoGo
+    ? proxyRedirectUri
+    : makeRedirectUri({ scheme: 'myapp', path: 'redirect' });
 
+
+    console.log(googleRedirectUri)
   const [googleRequest, googleResult, googlePromptAsync] = useAuthRequest(
     {
       webClientId: firebaseConfig.webClientId,
       androidClientId: firebaseConfig.androidClientId,
-      // On web use id_token in redirect hash to avoid COOP popup issues; native uses code flow.
+      redirectUri: googleRedirectUri,
       ...(Platform.OS === 'web' ? { responseType: ResponseType.IdToken } : {}),
     },
-    { scheme: 'myapp', path: 'redirect' }
+    isExpoGo ? undefined : { scheme: 'myapp', path: 'redirect' }
   );
 
   useEffect(() => {
@@ -52,12 +56,20 @@ export default function LoginScreen() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (googleResult?.type === 'success' && googleResult.params?.id_token) {
-      setGoogleError(null);
-      signInWithGoogleIdToken(googleResult.params.id_token)
-        .then(() => router.replace('/home'))
-        .catch(() => {});
-    } else if (googleResult?.type === 'error') {
+    if (googleResult?.type === 'success') {
+      // Native (Android/iOS) returns idToken in authentication object; web uses params.id_token
+      const idToken =
+        (googleResult as any).authentication?.idToken ??
+        googleResult.params?.id_token;
+      if (idToken) {
+        setGoogleError(null);
+        signInWithGoogleIdToken(idToken)
+          .then(() => router.replace('/home'))
+          .catch(() => {});
+        return;
+      }
+    }
+    if (googleResult?.type === 'error') {
       clearError();
       const msg = googleResult.error?.message ?? 'Google sign-in was cancelled or failed.';
       const isClientError = /invalid_client|401|OAuth client was not found/i.test(msg);
@@ -70,7 +82,7 @@ export default function LoginScreen() {
         );
       }
     }
-  }, [googleResult, googleRedirectUri]);
+  }, [googleResult, googleRedirectUri, signInWithGoogleIdToken, router, clearError]);
 
   const handleSubmit = async () => {
     const trimmedEmail = email.trim();

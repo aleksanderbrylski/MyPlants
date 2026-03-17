@@ -19,5 +19,11 @@ web-build/
 expo-env.d.ts
 # @end expo-cli
 
-# Firebase config (contains API keys)
-lib/firebase.config.ts
+
+.kiro
+.vscode
+
+/android
+
+# Local env vars
+.env.local

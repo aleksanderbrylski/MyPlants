@@ -24,13 +24,13 @@ const TASK_TYPE_LABEL: Record<UpcomingTask['taskType'], string> = {
   sprinkling: 'Sprinkling',
 };
 
-function TaskRow({ task }: { task: UpcomingTask }) {
+function TaskRow({ task, onPress }: { task: UpcomingTask; onPress?: () => void }) {
   const pillStyle = getRelativeLabelStyle(task.relativeLabel);
   const isWatering = task.taskType === 'watering';
   const isSprinkling = task.taskType === 'sprinkling';
   const isFertilization = task.taskType === 'fertilization';
   return (
-    <View style={styles.taskRow}>
+    <TouchableOpacity style={styles.taskRow} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.taskIconWrapper}>
         {isWatering && <Ionicons name="water" size={20} color="#0ea5e9" />}
         {isSprinkling && <Ionicons name="water-outline" size={20} color="#eab308" />}
@@ -45,7 +45,7 @@ function TaskRow({ task }: { task: UpcomingTask }) {
           {task.relativeLabel}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -79,7 +79,7 @@ export default function TasksScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/home')}>
           <Ionicons name="arrow-back" size={24} color="#1b3b2f" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>All Tasks</Text>
@@ -96,6 +96,12 @@ export default function TasksScreen() {
               <TaskRow
                 key={`${task.plantId}-${task.taskType}-${task.dueDate}`}
                 task={task}
+                onPress={() =>
+                  router.push({
+                    pathname: '/task-detail',
+                    params: { plantId: task.plantId, taskType: task.taskType, dueDate: task.dueDate },
+                  })
+                }
               />
             ))
           )}

@@ -102,32 +102,31 @@ function fertilizationTask(plant: Plant, todayStart: Date): UpcomingTask | null 
     const every = plant.fertilizationEveryWaterings;
     const wateringInterval = plant.wateringIntervalDays;
     if (!isValidInterval(every) || !isValidInterval(wateringInterval)) {
-      if (__DEV__) console.warn('[upcomingTasks] Skipping fertilization (with_watering): invalid fertilizationEveryWaterings or wateringIntervalDays', plant.id);
+      if (__DEV__) console.warn('[upcomingTasks] Skipping fertilization (with_watering): invalid params', plant.id);
       return null;
     }
-    const lastWatered = plant.lastWateredAt;
-    if (!lastWatered) {
-      return {
-        plantId: plant.id,
-        plantName: plant.name,
-        taskType: 'fertilization',
-        dueDate: toDateOnlyISO(todayStart),
-        relativeLabel: 'today',
-      };
-    }
-    const lastWateredStart = getStartOfDay(lastWatered);
-    const lastFert = plant.lastFertilizedAt;
-    let k0: number;
-    if (!lastFert) {
-      k0 = 1;
+    const lastFert = plant.lastFertilizedAt ? getStartOfDay(plant.lastFertilizedAt) : null;
+    const lastWatered = plant.lastWateredAt ? getStartOfDay(plant.lastWateredAt) : null;
+
+    let due: Date;
+
+    if (!lastWatered && !lastFert) {
+      // Nothing done yet — fertilization is due today (first action)
+      due = todayStart;
+    } else if (!lastFert) {
+      // Never fertilized — next fert = lastWatered + N * interval
+      due = getStartOfDay(addDays(lastWatered!, every * wateringInterval));
+    } else if (!lastWatered || lastFert.getTime() >= lastWatered.getTime()) {
+      // Fert was most recent — next fert = lastFert + N * interval
+      due = getStartOfDay(addDays(lastFert, every * wateringInterval));
     } else {
-      const lastFertStart = getStartOfDay(lastFert);
-      const diffMs = lastFertStart.getTime() - lastWateredStart.getTime();
-      const diffDays = diffMs / (24 * 60 * 60 * 1000);
-      k0 = Math.floor(diffDays / wateringInterval) + 1;
+      // Watering was most recent — count waterings since last fert
+      const diffDays = (lastWatered.getTime() - lastFert.getTime()) / (24 * 60 * 60 * 1000);
+      const wateringsSinceLastFert = Math.round(diffDays / wateringInterval);
+      const remaining = every - wateringsSinceLastFert;
+      due = getStartOfDay(addDays(lastWatered, remaining * wateringInterval));
     }
-    const kNext = k0 + (every - 1);
-    const due = getStartOfDay(addDays(lastWateredStart, kNext * wateringInterval));
+
     return {
       plantId: plant.id,
       plantName: plant.name,
@@ -138,6 +137,68 @@ function fertilizationTask(plant: Plant, todayStart: Date): UpcomingTask | null 
   }
 
   return null;
+}
+
+/**
+ * For with_watering mode: returns the next watering due date.
+ * Computes next fertilization date first (same logic as fertilizationTask),
+ * then next watering = anchor + interval, skipping fert day if they collide.
+ */
+function withWateringWateringTask(plant: Plant, todayStart: Date): UpcomingTask | null {
+  const every = plant.fertilizationEveryWaterings;
+  const wateringInterval = plant.wateringIntervalDays;
+  if (!isValidInterval(every) || !isValidInterval(wateringInterval)) return null;
+
+  const lastWatered = plant.lastWateredAt ? getStartOfDay(plant.lastWateredAt) : null;
+  const lastFert = plant.lastFertilizedAt ? getStartOfDay(plant.lastFertilizedAt) : null;
+
+  // Compute next fertilization date (mirrors fertilizationTask with_watering logic)
+  let nextFertDate: Date;
+  if (!lastWatered && !lastFert) {
+    nextFertDate = todayStart;
+  } else if (!lastFert) {
+    nextFertDate = getStartOfDay(addDays(lastWatered!, every * wateringInterval));
+  } else if (!lastWatered || lastFert.getTime() >= lastWatered.getTime()) {
+    nextFertDate = getStartOfDay(addDays(lastFert, every * wateringInterval));
+  } else {
+    const diffDays = (lastWatered.getTime() - lastFert.getTime()) / (24 * 60 * 60 * 1000);
+    const wateringsSinceLastFert = Math.round(diffDays / wateringInterval);
+    const remaining = every - wateringsSinceLastFert;
+    nextFertDate = getStartOfDay(addDays(lastWatered, remaining * wateringInterval));
+  }
+
+  // Nothing done yet — watering comes after the first fertilization
+  if (!lastWatered && !lastFert) {
+    const due = getStartOfDay(addDays(nextFertDate, wateringInterval));
+    return {
+      plantId: plant.id,
+      plantName: plant.name,
+      taskType: 'watering',
+      dueDate: toDateOnlyISO(due),
+      relativeLabel: relativeLabel(due, todayStart),
+    };
+  }
+
+  // Anchor: most recent of lastWatered / lastFert
+  const anchor =
+    !lastWatered ? lastFert! :
+    !lastFert ? lastWatered :
+    lastFert.getTime() >= lastWatered.getTime() ? lastFert : lastWatered;
+
+  let due = getStartOfDay(addDays(anchor, wateringInterval));
+
+  // If next watering lands on fertilization day, push it past
+  if (due.getTime() === nextFertDate.getTime()) {
+    due = getStartOfDay(addDays(nextFertDate, wateringInterval));
+  }
+
+  return {
+    plantId: plant.id,
+    plantName: plant.name,
+    taskType: 'watering',
+    dueDate: toDateOnlyISO(due),
+    relativeLabel: relativeLabel(due, todayStart),
+  };
 }
 
 function sprinklingTask(plant: Plant, todayStart: Date): UpcomingTask | null {
@@ -162,15 +223,21 @@ export function buildUpcomingTasks(plants: Plant[]): UpcomingTask[] {
   const tasks: UpcomingTask[] = [];
 
   for (const plant of plants) {
-    const w = wateringTask(plant, todayStart);
-    if (w) tasks.push(w);
-    const f = fertilizationTask(plant, todayStart);
-    if (f) tasks.push(f);
+    if (plant.fertilizationMode === 'with_watering') {
+      const w = withWateringWateringTask(plant, todayStart);
+      const f = fertilizationTask(plant, todayStart);
+      if (w) tasks.push(w);
+      if (f) tasks.push(f);
+    } else {
+      const w = wateringTask(plant, todayStart);
+      if (w) tasks.push(w);
+      const f = fertilizationTask(plant, todayStart);
+      if (f) tasks.push(f);
+    }
     const s = sprinklingTask(plant, todayStart);
     if (s) tasks.push(s);
   }
 
-  console.log('tasks', tasks);
   tasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return tasks;
 }

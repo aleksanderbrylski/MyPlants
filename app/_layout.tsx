@@ -8,6 +8,12 @@ import 'react-native-reanimated';
 import { AuthGuard } from '@/components/AuthGuard';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import {
+  requestNotificationPermission,
+  scheduleDailyCheck,
+  registerBackgroundTask,
+  setupNotificationHandler,
+} from '@/lib/notifications';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -21,6 +27,14 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
+      // Request permission and set up daily notification + background task
+      requestNotificationPermission().then((granted) => {
+        if (granted) {
+          setupNotificationHandler();
+          scheduleDailyCheck();
+          registerBackgroundTask();
+        }
+      });
     }
   }, [loaded]);
 
@@ -40,6 +54,8 @@ export default function RootLayout() {
         <Stack.Screen name="home" />
         <Stack.Screen name="garden" />
         <Stack.Screen name="add-plant" />
+        <Stack.Screen name="plant-details" />
+        <Stack.Screen name="task-detail" />
         <Stack.Screen name="+not-found" />
       </Stack>
         </AuthGuard>
