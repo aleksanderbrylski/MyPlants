@@ -1,50 +1,85 @@
-# Welcome to your Expo app 👋
+# MyPlants
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A mobile app for tracking and managing your houseplants. MyPlants helps you stay on top of watering, fertilization, and misting schedules with reminders and a clear overview of upcoming care tasks.
 
-## Get started
+## Features
 
-1. Install dependencies
+- Track multiple plants with photos, names, and care schedules
+- Configure watering, fertilization, and misting intervals per plant
+- Fertilization can be set on a fixed interval or tied to watering cycles
+- Dashboard showing upcoming tasks with relative due dates (today, overdue, in N days)
+- Push notifications with a daily background check for due tasks
+- Full garden view with per-plant detail and edit screens
+- Authentication via email/password or Google Sign-In
+- Data synced in real-time via Firebase Firestore
+- Plant photos stored in Firebase Storage
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+- [Expo](https://expo.dev) (SDK 54) with [Expo Router](https://expo.github.io/router/) for file-based navigation
+- React Native 0.81 + React 19
+- Firebase (Auth, Firestore, Storage)
+- TypeScript
+- `expo-notifications` + `expo-background-fetch` for scheduled reminders
+- `expo-image-picker` for plant photos
+- `expo-auth-session` for Google OAuth
 
-   ```bash
-    npx expo start
-   ```
+## Getting Started
 
-In the output, you'll find options to open the app in a
+### Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js 18+
+- [Expo CLI](https://docs.expo.dev/get-started/installation/) or `npx expo`
+- A Firebase project with Auth, Firestore, and Storage enabled
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 1. Clone and install
 
 ```bash
-npm run reset-project
+git clone <repo-url>
+cd myplants
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Configure environment variables
 
-## Learn more
+Create a `.env.local` file in the project root with your Firebase credentials:
 
-To learn more about developing your project with Expo, look at the following resources:
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=your_api_key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
+EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID=your_web_client_id
+EXPO_PUBLIC_FIREBASE_ANDROID_CLIENT_ID=your_android_client_id
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+You can find these values in your Firebase project settings.
 
-## Join the community
+### 3. Run the app
 
-Join our community of developers creating universal apps.
+```bash
+# Start Expo dev server
+npm start
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+# Run on Android
+npm run android
+
+# Run on iOS
+npm run ios
+
+# Run in browser
+npm run web
+```
+
+> Push notifications require a development build (`expo-dev-client`). They won't work in Expo Go.
+
+## Firebase Setup
+
+In your Firebase console:
+
+1. Enable **Email/Password** and **Google** sign-in methods under Authentication
+2. Create a **Firestore** database — plant data is stored under `users/{uid}/plants`
+3. Enable **Firebase Storage** for plant images
+4. Add your SHA-1 fingerprint to the Android app in Firebase if using Google Sign-In on Android
