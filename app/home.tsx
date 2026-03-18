@@ -18,7 +18,6 @@ import {
   getRelativeLabelStyle,
   type UpcomingTask,
 } from '@/lib/upcomingTasks';
-import { checkAndNotify, requestNotificationPermission, setupNotificationHandler } from '@/lib/notifications';
 
 const TASK_TYPE_LABEL: Record<UpcomingTask['taskType'], string> = {
   watering: 'Watering',
@@ -74,16 +73,6 @@ export default function HomeScreen() {
   const handleSignOut = async () => {
     await signOut();
     router.replace('/');
-  };
-
-  const handleTestNotification = async () => {
-    const granted = await requestNotificationPermission();
-    if (!granted) {
-      alert('Notifications not available. Use a dev build instead of Expo Go.');
-      return;
-    }
-    await setupNotificationHandler();
-    await checkAndNotify();
   };
 
   const plantRows = useMemo(() => {
@@ -174,10 +163,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </>
           )}
-          <TouchableOpacity style={styles.testNotifButton} onPress={handleTestNotification}>
-            <Ionicons name="notifications-outline" size={15} color="#6b7280" />
-            <Text style={styles.testNotifText}>Test notification</Text>
-          </TouchableOpacity>
         </View>
 
         {/* All Plants section */}
@@ -401,21 +386,5 @@ const styles = StyleSheet.create({
   plantCardSpacer: {
     flex: 1,
     minWidth: 0,
-  },
-  testNotifButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  testNotifText: {
-    fontSize: 13,
-    color: '#6b7280',
   },
 });

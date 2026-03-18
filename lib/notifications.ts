@@ -37,7 +37,7 @@ export async function setupNotificationHandler(): Promise<void> {
   } catch {}
 }
 
-/** Schedule a repeating notification at 9:00 AM every day */
+/** Schedule a repeating notification at 1:30 AM every day */
 export async function scheduleDailyCheck(): Promise<void> {
   if (isExpoGo) return;
   try {
@@ -51,7 +51,7 @@ export async function scheduleDailyCheck(): Promise<void> {
       },
       trigger: {
         type: N.SchedulableTriggerInputTypes.DAILY,
-        hour: 9,
+        hour: 12,
         minute: 0,
       },
     });
@@ -66,20 +66,20 @@ export async function sendTaskNotification(todayCount: number, overdueCount: num
   const parts: string[] = [];
   if (overdueCount > 0) parts.push(`${overdueCount} overdue`);
   if (todayCount > 0) parts.push(`${todayCount} due today`);
-  if (parts.length === 0) return;
-  try {
-    const N = await import('expo-notifications');
-    await N.scheduleNotificationAsync({
-      content: {
-        title: '🌿 Plant care reminder',
-        body: `You have ${parts.join(' and ')} task${todayCount + overdueCount === 1 ? '' : 's'}.`,
-        data: { type: 'daily_check' },
-      },
-      trigger: null, // deliver immediately
-    });
-  } catch (e) {
-    console.warn('[notifications] sendTaskNotification failed:', e);
-  }
+
+  const body = parts.length > 0
+    ? `You have ${parts.join(' and ')} task${todayCount + overdueCount === 1 ? '' : 's'}.`
+    : 'All your plants are on track for today.';
+
+  const N = await import('expo-notifications');
+  await N.scheduleNotificationAsync({
+    content: {
+      title: '🌿 Plant care reminder',
+      body,
+      data: { type: 'daily_check' },
+    },
+    trigger: null,
+  });
 }
 
 /** Fetch plants for the current user and fire a notification if any tasks are due/overdue */
