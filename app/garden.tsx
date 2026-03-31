@@ -117,7 +117,13 @@ export default function GardenScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/home');
+            }
+          }} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#1b3b2f" />
           </TouchableOpacity>
           <View style={styles.headerText}>

@@ -45,20 +45,7 @@ function nextIntervalDate(
 ): Date {
   if (!lastAt) return todayStart;
   const lastStart = getStartOfDay(lastAt);
-
-  // If last action was today (or in the future), next occurrence is lastStart + 1 interval, not today
-  if (
-    lastStart.getFullYear() > todayStart.getFullYear() ||
-    (lastStart.getFullYear() === todayStart.getFullYear() && lastStart.getMonth() > todayStart.getMonth()) ||
-    (lastStart.getFullYear() === todayStart.getFullYear() && lastStart.getMonth() === todayStart.getMonth() && lastStart.getDate() >= todayStart.getDate())
-  ) {
-    return getStartOfDay(addDays(lastStart, intervalDays));
-  }
-  const diffMs = todayStart.getTime() - lastStart.getTime();
-  const diffDays = diffMs / (24 * 60 * 60 * 1000);
-  let n = Math.ceil(diffDays / intervalDays);
-  if (n < 1) n = 1;
-  return getStartOfDay(addDays(lastStart, n * intervalDays));
+  return getStartOfDay(addDays(lastStart, intervalDays));
 }
 
 function wateringTask(plant: Plant, todayStart: Date): UpcomingTask | null {
@@ -114,8 +101,8 @@ function fertilizationTask(plant: Plant, todayStart: Date): UpcomingTask | null 
       // Nothing done yet — fertilization is due today (first action)
       due = todayStart;
     } else if (!lastFert) {
-      // Never fertilized — next fert = lastWatered + N * interval
-      due = getStartOfDay(addDays(lastWatered!, every * wateringInterval));
+      // Never fertilized — next fert = lastWatered + (N-1) * interval
+      due = getStartOfDay(addDays(lastWatered!, (every - 1) * wateringInterval));
     } else if (!lastWatered || lastFert.getTime() >= lastWatered.getTime()) {
       // Fert was most recent — next fert = lastFert + N * interval
       due = getStartOfDay(addDays(lastFert, every * wateringInterval));
@@ -123,8 +110,14 @@ function fertilizationTask(plant: Plant, todayStart: Date): UpcomingTask | null 
       // Watering was most recent — count waterings since last fert
       const diffDays = (lastWatered.getTime() - lastFert.getTime()) / (24 * 60 * 60 * 1000);
       const wateringsSinceLastFert = Math.round(diffDays / wateringInterval);
-      const remaining = every - wateringsSinceLastFert;
-      due = getStartOfDay(addDays(lastWatered, remaining * wateringInterval));
+
+      // Edge case if fertilization was very long time ago and watering recently
+      if (wateringsSinceLastFert >= every) {
+        due = getStartOfDay(addDays(lastWatered, wateringInterval));
+      } else {
+        const remaining = every - wateringsSinceLastFert;
+        due = getStartOfDay(addDays(lastWatered, remaining * wateringInterval));
+      }
     }
 
     return {
@@ -157,14 +150,18 @@ function withWateringWateringTask(plant: Plant, todayStart: Date): UpcomingTask 
   if (!lastWatered && !lastFert) {
     nextFertDate = todayStart;
   } else if (!lastFert) {
-    nextFertDate = getStartOfDay(addDays(lastWatered!, every * wateringInterval));
+    nextFertDate = getStartOfDay(addDays(lastWatered!, (every - 1) * wateringInterval));
   } else if (!lastWatered || lastFert.getTime() >= lastWatered.getTime()) {
     nextFertDate = getStartOfDay(addDays(lastFert, every * wateringInterval));
   } else {
     const diffDays = (lastWatered.getTime() - lastFert.getTime()) / (24 * 60 * 60 * 1000);
     const wateringsSinceLastFert = Math.round(diffDays / wateringInterval);
-    const remaining = every - wateringsSinceLastFert;
-    nextFertDate = getStartOfDay(addDays(lastWatered, remaining * wateringInterval));
+    if (wateringsSinceLastFert >= every) {
+      nextFertDate = getStartOfDay(addDays(lastWatered, wateringInterval));
+    } else {
+      const remaining = every - wateringsSinceLastFert;
+      nextFertDate = getStartOfDay(addDays(lastWatered, remaining * wateringInterval));
+    }
   }
 
   // Nothing done yet — watering comes after the first fertilization
@@ -182,8 +179,8 @@ function withWateringWateringTask(plant: Plant, todayStart: Date): UpcomingTask 
   // Anchor: most recent of lastWatered / lastFert
   const anchor =
     !lastWatered ? lastFert! :
-    !lastFert ? lastWatered :
-    lastFert.getTime() >= lastWatered.getTime() ? lastFert : lastWatered;
+      !lastFert ? lastWatered :
+        lastFert.getTime() >= lastWatered.getTime() ? lastFert : lastWatered;
 
   let due = getStartOfDay(addDays(anchor, wateringInterval));
 

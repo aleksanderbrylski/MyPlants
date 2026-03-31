@@ -11,6 +11,7 @@ import {
   onSnapshot,
   Unsubscribe,
   Timestamp,
+  deleteField,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
@@ -143,10 +144,12 @@ export async function updatePlant(
   updates: Partial<PlantInput>
 ): Promise<void> {
   const docRef = doc(db, 'users', uid, 'plants', plantId);
-  await updateDoc(docRef, {
-    ...stripUndefined(updates as Record<string, unknown>),
-    updatedAt: Timestamp.now(),
-  });
+  // Replace undefined values with deleteField() so Firestore actually removes the field
+  const payload: Record<string, unknown> = { updatedAt: Timestamp.now() };
+  for (const [key, value] of Object.entries(updates)) {
+    payload[key] = value === undefined ? deleteField() : value;
+  }
+  await updateDoc(docRef, payload);
 }
 
 export async function deletePlant(uid: string, plantId: string): Promise<void> {

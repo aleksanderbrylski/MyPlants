@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -88,6 +88,77 @@ const CareCard = ({
   );
 };
 
+type SliderWithInputProps = {
+  value: number;
+  minimumValue: number;
+  maximumValue: number;
+  step?: number;
+  suffix?: string;
+  onChange: (value: number) => void;
+};
+
+const SliderWithInput = ({
+  value,
+  minimumValue,
+  maximumValue,
+  step = 1,
+  suffix = '',
+  onChange,
+}: SliderWithInputProps) => {
+  const [editing, setEditing] = useState(false);
+  const [inputText, setInputText] = useState(String(value));
+  const inputRef = useRef<TextInput>(null);
+
+  const handlePressValue = () => {
+    setInputText(String(value));
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const commitInput = () => {
+    const parsed = parseInt(inputText, 10);
+    if (!isNaN(parsed)) {
+      const clamped = Math.min(maximumValue, Math.max(minimumValue, parsed));
+      onChange(clamped);
+    }
+    setEditing(false);
+  };
+
+  return (
+    <View style={styles.sliderRow}>
+      <Slider
+        style={styles.slider}
+        minimumValue={minimumValue}
+        maximumValue={maximumValue}
+        step={step}
+        value={value}
+        minimumTrackTintColor="#22c55e"
+        maximumTrackTintColor="#d1d5db"
+        thumbTintColor="#22c55e"
+        onValueChange={(v) => onChange(Math.round(v))}
+      />
+      {editing ? (
+        <TextInput
+          ref={inputRef}
+          style={styles.sliderValueInput}
+          value={inputText}
+          onChangeText={setInputText}
+          onBlur={commitInput}
+          onSubmitEditing={commitInput}
+          keyboardType="number-pad"
+          selectTextOnFocus
+        />
+      ) : (
+        <TouchableOpacity onPress={handlePressValue} style={styles.sliderValueTouchable}>
+          <Text style={styles.sliderValue}>
+            {value}{suffix}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
 export default function AddPlantScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ plantId?: string }>();
@@ -96,7 +167,7 @@ export default function AddPlantScreen() {
   const [wateringMode, setWateringMode] = useState<'disabled' | 'interval'>('interval');
   const [wateringInterval, setWateringInterval] = useState(7);
   const [fertilizationIntervalDays, setFertilizationIntervalDays] = useState(14);
-  const [fertilizationEveryWaterings, setFertilizationEveryWaterings] = useState(1);
+  const [fertilizationEveryWaterings, setFertilizationEveryWaterings] = useState(2);
   const [fertilizationMode, setFertilizationMode] = useState<
     'disabled' | 'interval' | 'with_watering'
   >('disabled');
@@ -168,8 +239,8 @@ export default function AddPlantScreen() {
       } else if (plant.fertilizationMode === 'with_watering') {
         setFertilizationEveryWaterings(
           typeof plant.fertilizationEveryWaterings === 'number'
-            ? plant.fertilizationEveryWaterings
-            : 1
+            ? Math.max(2, plant.fertilizationEveryWaterings)
+            : 2
         );
       }
     } else if (plant.fertilization) {
@@ -243,7 +314,35 @@ export default function AddPlantScreen() {
     }
   };
 
-  const pickImage = async () => {
+  const pickImage = () => {
+    if (Platform.OS === 'web') {
+      openGallery();
+      return;
+    }
+    Alert.alert('Add photo', 'Choose a source', [
+      { text: 'Camera', onPress: openCamera },
+      { text: 'Photo library', onPress: openGallery },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const openCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow camera access to take a plant photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  const openGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Allow access to your photos to add a plant image.');
@@ -395,7 +494,11 @@ export default function AddPlantScreen() {
         }
       }
 
-      router.replace('/garden');
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/garden');
+      }
     } catch (e) {
       console.log('error', e);
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not save plant.');
@@ -418,7 +521,11 @@ export default function AddPlantScreen() {
         setDeleting(true);
         try {
           await deletePlant(user.uid as string, plantId);
-          router.replace('/garden');
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/garden');
+          }
         } catch (e) {
           console.log('error deleting plant', e);
           const message =
@@ -442,7 +549,11 @@ export default function AddPlantScreen() {
           setDeleting(true);
           try {
             await deletePlant(user.uid, plantId);
-            router.replace('/garden');
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/garden');
+            }
           } catch (e) {
             console.log('error deleting plant', e);
             Alert.alert(
@@ -541,20 +652,13 @@ export default function AddPlantScreen() {
                   onToggle={(value) => setWateringMode(value ? 'interval' : 'disabled')}
                 >
                   <Text style={styles.subLabel}>Watering interval (days)</Text>
-                  <View style={styles.sliderRow}>
-                    <Slider
-                      style={styles.slider}
-                      minimumValue={1}
-                      maximumValue={30}
-                      step={1}
-                      value={wateringInterval}
-                      minimumTrackTintColor="#22c55e"
-                      maximumTrackTintColor="#d1d5db"
-                      thumbTintColor="#22c55e"
-                      onValueChange={(value) => setWateringInterval(Math.round(value))}
-                    />
-                    <Text style={styles.sliderValue}>{wateringInterval}d</Text>
-                  </View>
+                  <SliderWithInput
+                    value={wateringInterval}
+                    minimumValue={1}
+                    maximumValue={30}
+                    suffix="d"
+                    onChange={setWateringInterval}
+                  />
 
                   <Text style={styles.subLabel}>Last watered</Text>
                   {Platform.OS === 'web' ? (
@@ -639,44 +743,25 @@ export default function AddPlantScreen() {
                   {fertilizationMode === 'interval' && (
                     <>
                       <Text style={styles.subLabel}>Fertilization interval (days)</Text>
-                      <View style={styles.sliderRow}>
-                        <Slider
-                          style={styles.slider}
-                          minimumValue={1}
-                          maximumValue={30}
-                          step={1}
-                          value={fertilizationIntervalDays}
-                          minimumTrackTintColor="#22c55e"
-                          maximumTrackTintColor="#d1d5db"
-                          thumbTintColor="#22c55e"
-                          onValueChange={(value) =>
-                            setFertilizationIntervalDays(Math.round(value))
-                          }
-                        />
-                        <Text style={styles.sliderValue}>{fertilizationIntervalDays}d</Text>
-                      </View>
+                      <SliderWithInput
+                        value={fertilizationIntervalDays}
+                        minimumValue={2}
+                        maximumValue={30}
+                        suffix="d"
+                        onChange={setFertilizationIntervalDays}
+                      />
                     </>
                   )}
 
                   {fertilizationMode === 'with_watering' && (
                     <>
                       <Text style={styles.subLabel}>Every N waterings</Text>
-                      <View style={styles.sliderRow}>
-                        <Slider
-                          style={styles.slider}
-                          minimumValue={1}
-                          maximumValue={10}
-                          step={1}
-                          value={fertilizationEveryWaterings}
-                          minimumTrackTintColor="#22c55e"
-                          maximumTrackTintColor="#d1d5db"
-                          thumbTintColor="#22c55e"
-                          onValueChange={(value) =>
-                            setFertilizationEveryWaterings(Math.round(value))
-                          }
-                        />
-                        <Text style={styles.sliderValue}>{fertilizationEveryWaterings}</Text>
-                      </View>
+                      <SliderWithInput
+                        value={fertilizationEveryWaterings}
+                        minimumValue={2}
+                        maximumValue={10}
+                        onChange={setFertilizationEveryWaterings}
+                      />
                     </>
                   )}
 
@@ -733,20 +818,13 @@ export default function AddPlantScreen() {
                   onToggle={(value) => setSprinklingMode(value ? 'interval' : 'disabled')}
                 >
                   <Text style={styles.subLabel}>Sprinkling interval (days)</Text>
-                  <View style={styles.sliderRow}>
-                    <Slider
-                      style={styles.slider}
-                      minimumValue={1}
-                      maximumValue={30}
-                      step={1}
-                      value={sprinklingIntervalDays}
-                      minimumTrackTintColor="#22c55e"
-                      maximumTrackTintColor="#d1d5db"
-                      thumbTintColor="#22c55e"
-                      onValueChange={(value) => setSprinklingIntervalDays(Math.round(value))}
-                    />
-                    <Text style={styles.sliderValue}>{sprinklingIntervalDays}d</Text>
-                  </View>
+                  <SliderWithInput
+                    value={sprinklingIntervalDays}
+                    minimumValue={1}
+                    maximumValue={30}
+                    suffix="d"
+                    onChange={setSprinklingIntervalDays}
+                  />
 
                   <Text style={styles.subLabel}>Last misted</Text>
                   {Platform.OS === 'web' ? (
@@ -903,7 +981,7 @@ const styles = StyleSheet.create({
   },
   imagePicker: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    aspectRatio: 1,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#f3f4f6',
@@ -1054,6 +1132,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
     marginLeft: 8,
+  },
+  sliderValueTouchable: {
+    width: 40,
+    alignItems: 'flex-end',
+    marginLeft: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d1d5db',
+  },
+  sliderValueInput: {
+    width: 44,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#374151',
+    textAlign: 'right',
+    borderBottomWidth: 1,
+    borderBottomColor: '#22c55e',
+    paddingVertical: 2,
   },
   fertilizationModeRow: {
     flexDirection: 'row',

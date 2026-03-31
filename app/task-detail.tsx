@@ -251,7 +251,11 @@ export default function TaskDetailScreen() {
       await updatePlant(user.uid, plantId, {
         [getCompletionField(taskType)]: Timestamp.now(),
       });
-      router.replace('/home');
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/home');
+      }
     } catch {
       setWriteError('Could not save. Please try again.');
       setSaving(false);
@@ -372,7 +376,7 @@ const screenStyles = StyleSheet.create({
   },
   heroContainer: {
     width: '100%',
-    height: 220,
+    aspectRatio: 1,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#e5e7eb',

@@ -497,7 +497,7 @@ export default function PlantDetailsScreen() {
 
           <TouchableOpacity
             style={[screenStyles.actionButton, screenStyles.gardenButton]}
-            onPress={() => router.push('/garden')}
+            onPress={() => router.replace('/garden')}
           >
             <Ionicons name="grid-outline" size={18} color="#22c55e" />
             <Text style={[screenStyles.actionButtonText, screenStyles.gardenButtonText]}>
@@ -563,7 +563,7 @@ const screenStyles = StyleSheet.create({
   },
   photoContainer: {
     width: '100%',
-    height: 220,
+    aspectRatio: 1,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#e5e7eb',

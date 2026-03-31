@@ -50,6 +50,8 @@ function TaskRow({ task, onPress }: { task: UpcomingTask; onPress?: () => void }
   );
 }
 
+const PREVIEW_LIMIT = 6;
+
 const UPCOMING_PREVIEW_COUNT = 5;
 
 export default function HomeScreen() {
@@ -67,6 +69,9 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  const previewPlants = useMemo(() => plants.slice(0, PREVIEW_LIMIT), [plants]);
+  const hiddenCount = Math.max(0, plants.length - PREVIEW_LIMIT);
+
   const tasks = useMemo(() => buildUpcomingTasks(plants), [plants]);
   const tasksPreview = tasks.slice(0, UPCOMING_PREVIEW_COUNT);
 
@@ -77,11 +82,11 @@ export default function HomeScreen() {
 
   const plantRows = useMemo(() => {
     const rows: Plant[][] = [];
-    for (let i = 0; i < plants.length; i += 2) {
-      rows.push(plants.slice(i, i + 2));
+    for (let i = 0; i < previewPlants.length; i += 2) {
+      rows.push(previewPlants.slice(i, i + 2));
     }
     return rows;
-  }, [plants]);
+  }, [previewPlants]);
 
   const renderPlantCard = (plant: Plant) => (
     <TouchableOpacity
@@ -175,7 +180,7 @@ export default function HomeScreen() {
                 style={styles.viewGardenButton}
                 onPress={() => router.push('/garden')}
               >
-                <Text style={styles.viewGardenButtonText}>View Garden</Text>
+                <Text style={styles.viewGardenButtonText}>View all plants</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -186,11 +191,16 @@ export default function HomeScreen() {
                   {row.length === 1 && <View style={styles.plantCardSpacer} />}
                 </View>
               ))}
+              {hiddenCount > 0 && (
+                <TouchableOpacity onPress={() => router.push('/garden')} style={styles.hiddenCountWrap}>
+                  <Text style={styles.hiddenCountText}>+{hiddenCount} more plants</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.viewGardenButton}
                 onPress={() => router.push('/garden')}
               >
-                <Text style={styles.viewGardenButtonText}>View Garden</Text>
+                <Text style={styles.viewGardenButtonText}>View all plants</Text>
               </TouchableOpacity>
             </>
           )}
@@ -386,5 +396,16 @@ const styles = StyleSheet.create({
   plantCardSpacer: {
     flex: 1,
     minWidth: 0,
+  },
+  hiddenCountWrap: {
+    alignSelf: 'center',
+    marginVertical: 4,
+  },
+  hiddenCountText: {
+    textAlign: 'center',
+    color: '#22c55e',
+    fontWeight: '600',
+    fontSize: 14,
+    marginVertical: 8,
   },
 });

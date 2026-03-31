@@ -11,11 +11,11 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri, ResponseType } from 'expo-auth-session';
-import Constants from 'expo-constants';
+import { makeRedirectUri, ResponseType, useAuthRequest } from 'expo-auth-session';
+import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
-import { useAuthRequest, discovery } from 'expo-auth-session/providers/google';
 import { useAuth } from '@/contexts/AuthContext';
 import { firebaseConfig } from '../lib/firebase.config';
 
@@ -30,24 +30,41 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
-  const isExpoGo = Constants.appOwnership === 'expo';
-  const proxyRedirectUri = 'https://auth.expo.io/@aleksanderbrylski/MyPlants';
 
-  const googleRedirectUri = isExpoGo
-    ? proxyRedirectUri
-    : makeRedirectUri({ scheme: 'myapp', path: 'redirect' });
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      GoogleSignin.configure({ webClientId: firebaseConfig.webClientId });
+    }
+  }, []);
 
+  // Web-only: expo-auth-session flow
+  const [nonce] = useState(() => Crypto.randomUUID());
 
-    console.log(googleRedirectUri)
-  const [googleRequest, googleResult, googlePromptAsync] = useAuthRequest(
+  const [webRequest, webResult, webPromptAsync] = useAuthRequest(
     {
-      webClientId: firebaseConfig.webClientId,
-      androidClientId: firebaseConfig.androidClientId,
-      redirectUri: googleRedirectUri,
-      ...(Platform.OS === 'web' ? { responseType: ResponseType.IdToken } : {}),
+      clientId: firebaseConfig.webClientId,
+      redirectUri: makeRedirectUri(),
+      responseType: ResponseType.IdToken,
+      scopes: ['openid', 'profile', 'email'],
+      usePKCE: false,
+      extraParams: { nonce },
     },
-    isExpoGo ? undefined : { scheme: 'myapp', path: 'redirect' }
+    { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth' }
   );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (webResult?.type === 'success') {
+      const idToken = webResult.params?.id_token;
+      if (idToken) {
+        signInWithGoogleIdToken(idToken)
+          .then(() => router.replace('/home'))
+          .catch((e: any) => setGoogleError(e.message ?? 'Google sign-in failed.'));
+      }
+    } else if (webResult?.type === 'error') {
+      setGoogleError(webResult.error?.message ?? 'Google sign-in failed.');
+    }
+  }, [webResult]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -55,34 +72,26 @@ export default function LoginScreen() {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (googleResult?.type === 'success') {
-      // Native (Android/iOS) returns idToken in authentication object; web uses params.id_token
-      const idToken =
-        (googleResult as any).authentication?.idToken ??
-        googleResult.params?.id_token;
-      if (idToken) {
-        setGoogleError(null);
-        signInWithGoogleIdToken(idToken)
-          .then(() => router.replace('/home'))
-          .catch(() => {});
-        return;
-      }
+  const handleGoogleSignIn = async () => {
+    setGoogleError(null);
+    clearError();
+    if (Platform.OS === 'web') {
+      webPromptAsync();
+      return;
     }
-    if (googleResult?.type === 'error') {
-      clearError();
-      const msg = googleResult.error?.message ?? 'Google sign-in was cancelled or failed.';
-      const isClientError = /invalid_client|401|OAuth client was not found/i.test(msg);
-      setGoogleError(isClientError ? `${msg} See FIREBASE_SETUP.md or the alert for the redirect URI to add.` : msg);
-      if (isClientError) {
-        Alert.alert(
-          'Google OAuth: Add this redirect URI',
-          `In Google Cloud Console → APIs & Services → Credentials → your Web client → Authorized redirect URIs, add:\n\n${googleRedirectUri}\n\nAlso set webClientId in lib/firebase.config.ts to the Web client ID from Firebase → Authentication → Sign-in method → Google.`,
-          [{ text: 'OK' }]
-        );
-      }
+    try {
+      await GoogleSignin.hasPlayServices();
+      const { data } = await GoogleSignin.signIn();
+      const idToken = data?.idToken;
+      if (!idToken) throw new Error('No ID token returned from Google.');
+      await signInWithGoogleIdToken(idToken);
+      router.replace('/home');
+    } catch (e: any) {
+      if (e.code === statusCodes.SIGN_IN_CANCELLED) return;
+      if (e.code === statusCodes.IN_PROGRESS) return;
+      setGoogleError(e.message ?? 'Google sign-in failed.');
     }
-  }, [googleResult, googleRedirectUri, signInWithGoogleIdToken, router, clearError]);
+  };
 
   const handleSubmit = async () => {
     const trimmedEmail = email.trim();
@@ -194,22 +203,9 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.googleButton, (!googleRequest || submitting) && styles.buttonDisabled]}
-            onPress={async () => {
-              setGoogleError(null);
-              clearError();
-              if (Platform.OS === 'web' && googleRequest) {
-                try {
-                  const url = await googleRequest.makeAuthUrlAsync(discovery);
-                  window.location.href = url;
-                } catch (e) {
-                  setGoogleError('Could not start Google sign-in.');
-                }
-              } else {
-                googlePromptAsync();
-              }
-            }}
-            disabled={!googleRequest || submitting}
+            style={[styles.googleButton, submitting && styles.buttonDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={submitting}
           >
             <Text style={styles.googleButtonText}>Continue with Google</Text>
           </TouchableOpacity>

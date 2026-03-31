@@ -90,6 +90,7 @@ export async function checkAndNotify(): Promise<void> {
   const tasks = buildUpcomingTasks(plants);
   const todayCount = tasks.filter((t) => t.relativeLabel === 'today').length;
   const overdueCount = tasks.filter((t) => t.relativeLabel.endsWith('ago')).length;
+  if (todayCount === 0 && overdueCount === 0) return;
   await sendTaskNotification(todayCount, overdueCount);
 }
 
