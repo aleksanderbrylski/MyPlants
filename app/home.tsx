@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { subscribePlants, type Plant } from '@/lib/firestore';
+import { subscribePlants } from '@/lib/plantRepository';
+import { type Plant } from '@/lib/types';
 import {
   buildUpcomingTasks,
   getRelativeLabelStyle,
@@ -56,29 +56,22 @@ const UPCOMING_PREVIEW_COUNT = 5;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
   const [plants, setPlants] = useState<Plant[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    const unsubscribe = subscribePlants(user.uid, (fetched) => {
+    const unsubscribe = subscribePlants((fetched) => {
       setPlants(fetched);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, []);
 
   const previewPlants = useMemo(() => plants.slice(0, PREVIEW_LIMIT), [plants]);
   const hiddenCount = Math.max(0, plants.length - PREVIEW_LIMIT);
 
   const tasks = useMemo(() => buildUpcomingTasks(plants), [plants]);
   const tasksPreview = tasks.slice(0, UPCOMING_PREVIEW_COUNT);
-
-  const handleSignOut = async () => {
-    await signOut();
-    router.replace('/');
-  };
 
   const plantRows = useMemo(() => {
     const rows: Plant[][] = [];
@@ -127,7 +120,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header: MyPlants + Logout */}
+        {/* Header: MyPlants */}
         <View style={styles.topBar}>
           <View style={styles.brandContainer}>
             <View style={styles.brandIcon}>
@@ -135,10 +128,6 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.brandText}>MyPlants</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
-            <Text style={styles.logoutText}>Logout</Text>
-            <Ionicons name="arrow-forward" size={16} color="#374151" />
-          </TouchableOpacity>
         </View>
 
         {/* Upcoming Tasks card */}
@@ -248,20 +237,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1b3b2f',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
-  },
-  logoutText: {
-    fontSize: 13,
-    color: '#374151',
-    fontWeight: '500',
   },
   card: {
     backgroundColor: '#ffffff',

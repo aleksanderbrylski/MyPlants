@@ -11,9 +11,8 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Timestamp } from 'firebase/firestore';
-import { useAuth } from '@/contexts/AuthContext';
-import { getPlant, updatePlant, type Plant } from '@/lib/firestore';
+import { getPlant, updatePlant } from '@/lib/plantRepository';
+import { type Plant } from '@/lib/types';
 import { getRelativeLabelStyle, relativeLabel } from '@/lib/upcomingTasks';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -166,7 +165,6 @@ const badgeStyles = StyleSheet.create({
 
 export default function TaskDetailScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const params = useLocalSearchParams<{ plantId?: string; taskType?: string; dueDate?: string }>();
 
   const plantId = typeof params.plantId === 'string' && params.plantId ? params.plantId : null;
@@ -180,11 +178,6 @@ export default function TaskDetailScreen() {
   const [writeError, setWriteError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      setError('You must be signed in to view this page.');
-      setLoading(false);
-      return;
-    }
     if (!plantId) {
       setError('Invalid or missing plant ID.');
       setLoading(false);
@@ -192,7 +185,7 @@ export default function TaskDetailScreen() {
     }
     const load = async () => {
       try {
-        const result = await getPlant(user.uid, plantId);
+        const result = await getPlant(plantId);
         if (result) {
           setPlant(result);
         } else {
@@ -205,7 +198,7 @@ export default function TaskDetailScreen() {
       }
     };
     load();
-  }, [user, plantId]);
+  }, [plantId]);
 
   if (loading) {
     return (
@@ -224,7 +217,7 @@ export default function TaskDetailScreen() {
           <Text style={screenStyles.errorText}>{error ?? 'Something went wrong.'}</Text>
           <TouchableOpacity
             style={screenStyles.goHomeButton}
-            onPress={() => router.replace(user ? '/home' : '/')}
+            onPress={() => router.replace('/home')}
           >
             <Text style={screenStyles.goHomeButtonText}>Go Home</Text>
           </TouchableOpacity>
@@ -244,12 +237,12 @@ export default function TaskDetailScreen() {
   })();
 
   const handleMarkAsDone = async () => {
-    if (!user || !plantId) return;
+    if (!plantId) return;
     setWriteError(null);
     setSaving(true);
     try {
-      await updatePlant(user.uid, plantId, {
-        [getCompletionField(taskType)]: Timestamp.now(),
+      await updatePlant(plantId, {
+        [getCompletionField(taskType)]: new Date(),
       });
       if (router.canGoBack()) {
         router.back();

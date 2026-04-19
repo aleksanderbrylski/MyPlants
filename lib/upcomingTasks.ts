@@ -1,4 +1,4 @@
-import type { Plant } from './firestore';
+import type { Plant } from './types';
 
 export type UpcomingTask = {
   plantId: string;

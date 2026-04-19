@@ -5,8 +5,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { AuthGuard } from '@/components/AuthGuard';
-import { AuthProvider } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   requestNotificationPermission,
@@ -44,13 +42,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        <AuthGuard>
-        <Stack screenOptions={{ headerShown: false }}>
-        {/* Login is the initial screen (app/index.tsx) */}
-        <Stack.Screen name="index" />
-        <Stack.Screen name="redirect" />
-        {/* Home and Garden screens */}
+      <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="home" />
         <Stack.Screen name="garden" />
         <Stack.Screen name="add-plant" />
@@ -58,8 +50,6 @@ export default function RootLayout() {
         <Stack.Screen name="task-detail" />
         <Stack.Screen name="+not-found" />
       </Stack>
-        </AuthGuard>
-      </AuthProvider>
     </ThemeProvider>
   );
 }

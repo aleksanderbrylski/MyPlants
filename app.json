@@ -43,9 +43,7 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-font",
-      "expo-web-browser",
-      "@react-native-google-signin/google-signin"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

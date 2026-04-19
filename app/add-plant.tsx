@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   Switch,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,15 +18,14 @@ import Slider from '@react-native-community/slider';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
 import {
   addPlant,
   updatePlant,
-  uploadPlantImage,
   getPlant,
   deletePlant,
-  type Plant,
-} from '@/lib/firestore';
+} from '@/lib/plantRepository';
+import { saveImage } from '@/lib/imageStore';
+import { type Plant } from '@/lib/types';
 
 type CareCardProps = {
   iconName: keyof typeof Ionicons.glyphMap;
@@ -162,7 +160,6 @@ const SliderWithInput = ({
 export default function AddPlantScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ plantId?: string }>();
-  const { user } = useAuth();
   const [name, setName] = useState('');
   const [wateringMode, setWateringMode] = useState<'disabled' | 'interval'>('interval');
   const [wateringInterval, setWateringInterval] = useState(7);
@@ -193,10 +190,10 @@ export default function AddPlantScreen() {
 
   useEffect(() => {
     const loadPlant = async () => {
-      if (!user?.uid || !plantId) return;
+      if (!plantId) return;
       setLoadingPlant(true);
       try {
-        const plant = await getPlant(user.uid, plantId);
+        const plant = await getPlant(plantId);
         if (!plant) return;
         populateFromPlant(plant);
       } finally {
@@ -205,7 +202,7 @@ export default function AddPlantScreen() {
     };
     loadPlant();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, plantId]);
+  }, [plantId]);
 
   const populateFromPlant = (plant: Plant) => {
     setName(plant.name ?? '');
@@ -305,9 +302,7 @@ export default function AddPlantScreen() {
   };
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS !== 'ios') {
-      setShowDatePicker(false);
-    }
+    setShowDatePicker(false);
     if (selectedDate) {
       setLastWatered(selectedDate);
       setLastWateredText(formatDate(selectedDate));
@@ -315,10 +310,6 @@ export default function AddPlantScreen() {
   };
 
   const pickImage = () => {
-    if (Platform.OS === 'web') {
-      openGallery();
-      return;
-    }
     Alert.alert('Add photo', 'Choose a source', [
       { text: 'Camera', onPress: openCamera },
       { text: 'Photo library', onPress: openGallery },
@@ -365,54 +356,10 @@ export default function AddPlantScreen() {
       Alert.alert('Missing fields', 'Please enter a plant name.');
       return;
     }
-    if (!user?.uid) return;
 
-    let lastWateredDate: Date | undefined;
-    let lastFertilizedDate: Date | undefined;
-    let lastSprinkledDate: Date | undefined;
-    if (Platform.OS === 'web') {
-      const trimmed = lastWateredText.trim();
-      if (trimmed) {
-        const parsed = new Date(trimmed);
-        if (isNaN(parsed.getTime())) {
-          Alert.alert(
-            'Invalid date',
-            'Please enter last watered date in a valid format (e.g. 2024-03-10).'
-          );
-          return;
-        }
-        lastWateredDate = parsed;
-      }
-      const fertilizedTrimmed = lastFertilizedText.trim();
-      if (fertilizedTrimmed) {
-        const parsed = new Date(fertilizedTrimmed);
-        if (isNaN(parsed.getTime())) {
-          Alert.alert(
-            'Invalid date',
-            'Please enter last fertilization date in a valid format (e.g. 2024-03-10).'
-          );
-          return;
-        }
-        lastFertilizedDate = parsed;
-      }
-      const sprinkledTrimmed = lastSprinkledText.trim();
-      if (sprinkledTrimmed) {
-        const parsed = new Date(sprinkledTrimmed);
-        if (isNaN(parsed.getTime())) {
-          Alert.alert(
-            'Invalid date',
-            'Please enter last sprinkling date in a valid format (e.g. 2024-03-10).'
-          );
-          return;
-        }
-        lastSprinkledDate = parsed;
-      }
-    } else {
-      lastWateredDate = lastWatered ?? undefined;
-      lastFertilizedDate = lastFertilized ?? undefined;
-      lastSprinkledDate = lastSprinkled ?? undefined;
-    }
-
+    const lastWateredDate = lastWatered ?? undefined;
+    const lastFertilizedDate = lastFertilized ?? undefined;
+    const lastSprinkledDate = lastSprinkled ?? undefined;
 
     setSaving(true);
     try {
@@ -477,20 +424,18 @@ export default function AddPlantScreen() {
       };
 
       if (isEditing && plantId) {
-        await updatePlant(user.uid, plantId, baseData);
+        await updatePlant(plantId, baseData);
 
-        if (imageUri && !imageUri.startsWith('http')) {
-          const mimeType = imageUri.endsWith('.png') ? 'image/png' : 'image/jpeg';
-          const imageUrl = await uploadPlantImage(user.uid, plantId, imageUri, mimeType);
-          await updatePlant(user.uid, plantId, { imageUrl });
+        if (imageUri && !imageUri.startsWith('http') && !imageUri.startsWith('file://')) {
+          const savedUri = await saveImage(imageUri);
+          await updatePlant(plantId, { imageUrl: savedUri });
         }
       } else {
-        const newPlantId = await addPlant(user.uid, baseData);
+        const newPlantId = await addPlant(baseData);
 
         if (imageUri) {
-          const mimeType = imageUri.endsWith('.png') ? 'image/png' : 'image/jpeg';
-          const imageUrl = await uploadPlantImage(user.uid, newPlantId, imageUri, mimeType);
-          await updatePlant(user.uid, newPlantId, { imageUrl });
+          const savedUri = await saveImage(imageUri);
+          await updatePlant(newPlantId, { imageUrl: savedUri });
         }
       }
 
@@ -508,37 +453,10 @@ export default function AddPlantScreen() {
   };
 
   const handleDelete = () => {
-    if (!user?.uid || !plantId) return;
+    if (!plantId) return;
 
     const confirmMessage =
       'Are you sure you want to delete this plant? This cannot be undone.';
-
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(confirmMessage);
-      if (!confirmed) return;
-
-      (async () => {
-        setDeleting(true);
-        try {
-          await deletePlant(user.uid as string, plantId);
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace('/garden');
-          }
-        } catch (e) {
-          console.log('error deleting plant', e);
-          const message =
-            e instanceof Error ? e.message : 'Could not delete plant. Please try again.';
-          // eslint-disable-next-line no-alert
-          window.alert(message);
-        } finally {
-          setDeleting(false);
-        }
-      })();
-
-      return;
-    }
 
     Alert.alert('Delete plant', confirmMessage, [
       { text: 'Cancel', style: 'cancel' },
@@ -548,7 +466,7 @@ export default function AddPlantScreen() {
         onPress: async () => {
           setDeleting(true);
           try {
-            await deletePlant(user.uid, plantId);
+            await deletePlant(plantId);
             if (router.canGoBack()) {
               router.back();
             } else {
@@ -580,7 +498,7 @@ export default function AddPlantScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="height"
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
@@ -661,39 +579,30 @@ export default function AddPlantScreen() {
                   />
 
                   <Text style={styles.subLabel}>Last watered</Text>
-                  {Platform.OS === 'web' ? (
-                    <TextInput
-                      style={styles.input}
-                      placeholder="YYYY-MM-DD"
-                      value={lastWateredText}
-                      onChangeText={setLastWateredText}
-                    />
-                  ) : (
-                    <>
-                      <TouchableOpacity
-                        style={styles.dateInput}
-                        onPress={() => setShowDatePicker(true)}
-                        activeOpacity={0.8}
+                  <>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => setShowDatePicker(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.dateInputText,
+                          !lastWatered && styles.dateInputPlaceholder,
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.dateInputText,
-                            !lastWatered && styles.dateInputPlaceholder,
-                          ]}
-                        >
-                          {lastWatered ? formatDate(lastWatered) : 'Select date'}
-                        </Text>
-                      </TouchableOpacity>
-                      {showDatePicker && (
-                        <DateTimePicker
-                          value={lastWatered ?? new Date()}
-                          mode="date"
-                          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                          onChange={handleDateChange}
-                        />
-                      )}
-                    </>
-                  )}
+                        {lastWatered ? formatDate(lastWatered) : 'Select date'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={lastWatered ?? new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={handleDateChange}
+                      />
+                    )}
+                  </>
                 </CareCard>
 
                 <CareCard
@@ -766,47 +675,36 @@ export default function AddPlantScreen() {
                   )}
 
                   <Text style={styles.subLabel}>Last fertilized</Text>
-                  {Platform.OS === 'web' ? (
-                    <TextInput
-                      style={styles.input}
-                      placeholder="YYYY-MM-DD"
-                      value={lastFertilizedText}
-                      onChangeText={setLastFertilizedText}
-                    />
-                  ) : (
-                    <>
-                      <TouchableOpacity
-                        style={styles.dateInput}
-                        onPress={() => setShowFertilizedDatePicker(true)}
-                        activeOpacity={0.8}
+                  <>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => setShowFertilizedDatePicker(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.dateInputText,
+                          !lastFertilized && styles.dateInputPlaceholder,
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.dateInputText,
-                            !lastFertilized && styles.dateInputPlaceholder,
-                          ]}
-                        >
-                          {lastFertilized ? formatDate(lastFertilized) : 'Select date'}
-                        </Text>
-                      </TouchableOpacity>
-                      {showFertilizedDatePicker && (
-                        <DateTimePicker
-                          value={lastFertilized ?? new Date()}
-                          mode="date"
-                          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                          onChange={(_, selectedDate) => {
-                            if (Platform.OS !== 'ios') {
-                              setShowFertilizedDatePicker(false);
-                            }
-                            if (selectedDate) {
-                              setLastFertilized(selectedDate);
-                              setLastFertilizedText(formatDate(selectedDate));
-                            }
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
+                        {lastFertilized ? formatDate(lastFertilized) : 'Select date'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showFertilizedDatePicker && (
+                      <DateTimePicker
+                        value={lastFertilized ?? new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={(_, selectedDate) => {
+                          setShowFertilizedDatePicker(false);
+                          if (selectedDate) {
+                            setLastFertilized(selectedDate);
+                            setLastFertilizedText(formatDate(selectedDate));
+                          }
+                        }}
+                      />
+                    )}
+                  </>
                 </CareCard>
 
                 <CareCard
@@ -827,47 +725,36 @@ export default function AddPlantScreen() {
                   />
 
                   <Text style={styles.subLabel}>Last misted</Text>
-                  {Platform.OS === 'web' ? (
-                    <TextInput
-                      style={styles.input}
-                      placeholder="YYYY-MM-DD"
-                      value={lastSprinkledText}
-                      onChangeText={setLastSprinkledText}
-                    />
-                  ) : (
-                    <>
-                      <TouchableOpacity
-                        style={styles.dateInput}
-                        onPress={() => setShowSprinkledDatePicker(true)}
-                        activeOpacity={0.8}
+                  <>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => setShowSprinkledDatePicker(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.dateInputText,
+                          !lastSprinkled && styles.dateInputPlaceholder,
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.dateInputText,
-                            !lastSprinkled && styles.dateInputPlaceholder,
-                          ]}
-                        >
-                          {lastSprinkled ? formatDate(lastSprinkled) : 'Select date'}
-                        </Text>
-                      </TouchableOpacity>
-                      {showSprinkledDatePicker && (
-                        <DateTimePicker
-                          value={lastSprinkled ?? new Date()}
-                          mode="date"
-                          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                          onChange={(_, selectedDate) => {
-                            if (Platform.OS !== 'ios') {
-                              setShowSprinkledDatePicker(false);
-                            }
-                            if (selectedDate) {
-                              setLastSprinkled(selectedDate);
-                              setLastSprinkledText(formatDate(selectedDate));
-                            }
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
+                        {lastSprinkled ? formatDate(lastSprinkled) : 'Select date'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showSprinkledDatePicker && (
+                      <DateTimePicker
+                        value={lastSprinkled ?? new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={(_, selectedDate) => {
+                          setShowSprinkledDatePicker(false);
+                          if (selectedDate) {
+                            setLastSprinkled(selectedDate);
+                            setLastSprinkledText(formatDate(selectedDate));
+                          }
+                        }}
+                      />
+                    )}
+                  </>
                 </CareCard>
 
                 <SectionCard

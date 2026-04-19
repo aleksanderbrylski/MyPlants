@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { subscribePlants, type Plant } from '@/lib/firestore';
+import { subscribePlants } from '@/lib/plantRepository';
+import { type Plant } from '@/lib/types';
 import {
   buildUpcomingTasks,
   getRelativeLabelStyle,
@@ -51,18 +51,16 @@ function TaskRow({ task, onPress }: { task: UpcomingTask; onPress?: () => void }
 
 export default function TasksScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const [plants, setPlants] = useState<Plant[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    const unsubscribe = subscribePlants(user.uid, (fetched) => {
+    const unsubscribe = subscribePlants((fetched) => {
       setPlants(fetched);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, []);
 
   const tasks = useMemo(() => buildUpcomingTasks(plants), [plants]);
 

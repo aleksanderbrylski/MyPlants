@@ -1,6 +1,5 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { getAuth } from 'firebase/auth';
-import { getPlants } from './firestore';
+import { getPlants } from './plantRepository';
 import { buildUpcomingTasks } from './upcomingTasks';
 
 const BACKGROUND_TASK_NAME = 'DAILY_PLANT_TASK_CHECK';
@@ -82,11 +81,10 @@ export async function sendTaskNotification(todayCount: number, overdueCount: num
   });
 }
 
-/** Fetch plants for the current user and fire a notification if any tasks are due/overdue */
+/** Fetch plants and fire a notification if any tasks are due/overdue */
 export async function checkAndNotify(): Promise<void> {
-  const uid = getAuth().currentUser?.uid;
-  if (!uid) return;
-  const plants = await getPlants(uid);
+  const plants = await getPlants();
+  if (plants.length === 0) return;
   const tasks = buildUpcomingTasks(plants);
   const todayCount = tasks.filter((t) => t.relativeLabel === 'today').length;
   const overdueCount = tasks.filter((t) => t.relativeLabel.endsWith('ago')).length;

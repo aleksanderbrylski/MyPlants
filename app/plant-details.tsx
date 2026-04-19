@@ -9,12 +9,12 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  Platform,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { getPlant, deletePlant, type Plant } from '@/lib/firestore';
+import { getPlant, deletePlant } from '@/lib/plantRepository';
+import { deleteImage } from '@/lib/imageStore';
+import type { Plant } from '@/lib/types';
 
 /**
  * Returns "Not recorded" when date is undefined, otherwise formats as "YYYY-MM-DD".
@@ -301,7 +301,6 @@ const sectionStyles = StyleSheet.create({
 export default function PlantDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ plantId?: string }>();
-  const { user } = useAuth();
 
   const plantId = typeof params.plantId === 'string' ? params.plantId : undefined;
 
@@ -313,13 +312,13 @@ export default function PlantDetailsScreen() {
 
   useEffect(() => {
     const load = async () => {
-      if (!user?.uid || !plantId) {
+      if (!plantId) {
         setNotFound(true);
         setLoading(false);
         return;
       }
       try {
-        const result = await getPlant(user.uid, plantId);
+        const result = await getPlant(plantId);
         if (result) {
           setPlant(result);
         } else {
@@ -332,7 +331,7 @@ export default function PlantDetailsScreen() {
       }
     };
     load();
-  }, [user?.uid, plantId]);
+  }, [plantId]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -343,26 +342,9 @@ export default function PlantDetailsScreen() {
   };
 
   const handleDelete = () => {
-    if (!user?.uid || !plantId) return;
+    if (!plantId) return;
 
     const confirmMessage = 'Are you sure you want to delete this plant? This cannot be undone.';
-
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(confirmMessage);
-      if (!confirmed) return;
-      (async () => {
-        setDeleting(true);
-        try {
-          await deletePlant(user.uid as string, plantId);
-          router.replace('/home');
-        } catch (e) {
-          window.alert(e instanceof Error ? e.message : 'Could not delete plant. Please try again.');
-        } finally {
-          setDeleting(false);
-        }
-      })();
-      return;
-    }
 
     Alert.alert(
       'Delete Plant',
@@ -375,7 +357,10 @@ export default function PlantDetailsScreen() {
           onPress: async () => {
             setDeleting(true);
             try {
-              await deletePlant(user.uid, plantId);
+              if (plant?.imageUrl) {
+                await deleteImage(plant.imageUrl);
+              }
+              await deletePlant(plantId);
               router.replace('/home');
             } catch (e) {
               Alert.alert(
