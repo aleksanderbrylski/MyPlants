@@ -74,7 +74,7 @@ export default function GardenScreen() {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.9}
-      onPress={() => router.push({ pathname: '/add-plant', params: { plantId: item.id } })}
+      onPress={() => router.push({ pathname: '/plant-details', params: { plantId: item.id } })}
     >
       <View style={styles.imageWrapper}>
         {item.imageUrl ? (
